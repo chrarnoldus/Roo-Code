@@ -1435,43 +1435,78 @@ export class Task extends EventEmitter<ClineEvents> {
 				}
 
 				const drainStreamInBackgroundToFindAllUsage = async () => {
-					let usageFound = false
-					while (!item.done) {
-						const chunk = item.value
-						item = await iterator.next()
-						if (chunk && chunk.type === "usage") {
-							usageFound = true
-							inputTokens += chunk.inputTokens
-							outputTokens += chunk.outputTokens
-							cacheWriteTokens += chunk.cacheWriteTokens ?? 0
-							cacheReadTokens += chunk.cacheReadTokens ?? 0
-							totalCost = chunk.totalCost
+					const timeoutMs = 30000 // 30 second timeout
+					const startTime = Date.now()
+
+					try {
+						let usageFound = false
+						while (!item.done) {
+							// Check for timeout
+							if (Date.now() - startTime > timeoutMs) {
+								console.warn(`Background usage collection timed out after ${timeoutMs}ms`)
+								break
+							}
+
+							const chunk = item.value
+							item = await iterator.next()
+							if (chunk && chunk.type === "usage") {
+								usageFound = true
+								inputTokens += chunk.inputTokens
+								outputTokens += chunk.outputTokens
+								cacheWriteTokens += chunk.cacheWriteTokens ?? 0
+								cacheReadTokens += chunk.cacheReadTokens ?? 0
+								totalCost = chunk.totalCost
+							}
+						}
+						if (usageFound) {
+							updateApiReqMsg()
+							await this.saveClineMessages()
+						}
+						if (inputTokens > 0 || outputTokens > 0 || cacheWriteTokens > 0 || cacheReadTokens > 0) {
+							TelemetryService.instance.captureLlmCompletion(this.taskId, {
+								inputTokens,
+								outputTokens,
+								cacheWriteTokens,
+								cacheReadTokens,
+								cost:
+									totalCost ??
+									calculateApiCostAnthropic(
+										this.api.getModel().info,
+										inputTokens,
+										outputTokens,
+										cacheWriteTokens,
+										cacheReadTokens,
+									),
+							})
+						} else {
+							const modelId = getModelId(this.apiConfiguration)
+							console.warn(
+								`Suspicious: request ${lastApiReqIndex} is complete, but no usage info was found. Model: ${modelId}`,
+							)
+						}
+					} catch (error) {
+						console.error("Error draining stream for usage data:", error)
+						// Still try to capture whatever usage data we have collected so far
+						if (inputTokens > 0 || outputTokens > 0 || cacheWriteTokens > 0 || cacheReadTokens > 0) {
+							TelemetryService.instance.captureLlmCompletion(this.taskId, {
+								inputTokens,
+								outputTokens,
+								cacheWriteTokens,
+								cacheReadTokens,
+								cost:
+									totalCost ??
+									calculateApiCostAnthropic(
+										this.api.getModel().info,
+										inputTokens,
+										outputTokens,
+										cacheWriteTokens,
+										cacheReadTokens,
+									),
+							})
 						}
 					}
-					if (usageFound) {
-						updateApiReqMsg()
-					}
-					if (inputTokens > 0 || outputTokens > 0 || cacheWriteTokens > 0 || cacheReadTokens > 0) {
-						TelemetryService.instance.captureLlmCompletion(this.taskId, {
-							inputTokens,
-							outputTokens,
-							cacheWriteTokens,
-							cacheReadTokens,
-							cost:
-								totalCost ??
-								calculateApiCostAnthropic(
-									this.api.getModel().info,
-									inputTokens,
-									outputTokens,
-									cacheWriteTokens,
-									cacheReadTokens,
-								),
-						})
-					} else {
-						console.warn(`Suspicious: request ${lastApiReqIndex} is complete, but no usage info was found.`)
-					}
 				}
-				drainStreamInBackgroundToFindAllUsage() // no await so it runs in the background
+				const backgroundDrainPromise = drainStreamInBackgroundToFindAllUsage() // Store promise reference
 			} catch (error) {
 				// Abandoned happens when extension is no longer waiting for the
 				// Cline instance to finish aborting (error is thrown here when
@@ -1534,7 +1569,8 @@ export class Task extends EventEmitter<ClineEvents> {
 				presentAssistantMessage(this)
 			}
 
-			updateApiReqMsg()
+			// Note: updateApiReqMsg() is now called from within drainStreamInBackgroundToFindAllUsage
+			// to avoid race conditions with the background task
 			await this.saveClineMessages()
 			await this.providerRef.deref()?.postStateToWebview()
 
