@@ -19,6 +19,7 @@ import {
 	type ClineSay,
 	type ToolProgressStatus,
 	DEFAULT_CONSECUTIVE_MISTAKE_LIMIT,
+	DEFAULT_USAGE_COLLECTION_TIMEOUT_MS,
 	type HistoryItem,
 	TelemetryEventName,
 	TodoItem,
@@ -1274,6 +1275,10 @@ export class Task extends EventEmitter<ClineEvents> {
 			// of prices in tasks from history (it's worth removing a few months
 			// from now).
 			const updateApiReqMsg = (cancelReason?: ClineApiReqCancelReason, streamingFailedMessage?: string) => {
+				if (lastApiReqIndex < 0 || !this.clineMessages[lastApiReqIndex]) {
+					return
+				}
+
 				const existingData = JSON.parse(this.clineMessages[lastApiReqIndex].text || "{}")
 				this.clineMessages[lastApiReqIndex].text = JSON.stringify({
 					...existingData,
@@ -1443,9 +1448,8 @@ export class Task extends EventEmitter<ClineEvents> {
 					total: totalCost,
 				}
 
-				const drainStreamInBackgroundToFindAllUsage = async () => {
-					// Make timeout configurable via environment variable or use default
-					const timeoutMs = parseInt(process.env.CLINE_USAGE_COLLECTION_TIMEOUT || "30000", 10)
+				const drainStreamInBackgroundToFindAllUsage = async (apiReqIndex: number) => {
+					const timeoutMs = DEFAULT_USAGE_COLLECTION_TIMEOUT_MS
 					const startTime = Date.now()
 					const modelId = getModelId(this.apiConfiguration)
 
@@ -1457,13 +1461,16 @@ export class Task extends EventEmitter<ClineEvents> {
 					let bgTotalCost = currentTokens.total
 
 					// Helper function to capture telemetry and update messages
-					const captureUsageData = async (tokens: {
-						input: number
-						output: number
-						cacheWrite: number
-						cacheRead: number
-						total?: number
-					}) => {
+					const captureUsageData = async (
+						tokens: {
+							input: number
+							output: number
+							cacheWrite: number
+							cacheRead: number
+							total?: number
+						},
+						messageIndex: number = apiReqIndex,
+					) => {
 						if (tokens.input > 0 || tokens.output > 0 || tokens.cacheWrite > 0 || tokens.cacheRead > 0) {
 							// Update the shared variables atomically
 							inputTokens = tokens.input
@@ -1475,6 +1482,12 @@ export class Task extends EventEmitter<ClineEvents> {
 							// Update the API request message with the latest usage data
 							updateApiReqMsg()
 							await this.saveClineMessages()
+
+							// Update the specific message in the webview
+							const apiReqMessage = this.clineMessages[messageIndex]
+							if (apiReqMessage) {
+								await this.updateClineMessage(apiReqMessage)
+							}
 
 							// Capture telemetry
 							TelemetryService.instance.captureLlmCompletion(this.taskId, {
@@ -1497,17 +1510,20 @@ export class Task extends EventEmitter<ClineEvents> {
 
 					try {
 						let usageFound = false
+						let chunkCount = 0
 						while (!item.done) {
 							// Check for timeout
 							if (Date.now() - startTime > timeoutMs) {
 								console.warn(
-									`Background usage collection timed out after ${timeoutMs}ms for model: ${modelId}`,
+									`[Background Usage Collection] Timed out after ${timeoutMs}ms for model: ${modelId}, processed ${chunkCount} chunks`,
 								)
 								break
 							}
 
 							const chunk = item.value
 							item = await iterator.next()
+							chunkCount++
+
 							if (chunk && chunk.type === "usage") {
 								usageFound = true
 								bgInputTokens += chunk.inputTokens
@@ -1519,13 +1535,16 @@ export class Task extends EventEmitter<ClineEvents> {
 						}
 
 						if (usageFound) {
-							await captureUsageData({
-								input: bgInputTokens,
-								output: bgOutputTokens,
-								cacheWrite: bgCacheWriteTokens,
-								cacheRead: bgCacheReadTokens,
-								total: bgTotalCost,
-							})
+							await captureUsageData(
+								{
+									input: bgInputTokens,
+									output: bgOutputTokens,
+									cacheWrite: bgCacheWriteTokens,
+									cacheRead: bgCacheReadTokens,
+									total: bgTotalCost,
+								},
+								lastApiReqIndex,
+							)
 						} else if (
 							bgInputTokens > 0 ||
 							bgOutputTokens > 0 ||
@@ -1533,16 +1552,19 @@ export class Task extends EventEmitter<ClineEvents> {
 							bgCacheReadTokens > 0
 						) {
 							// We have some usage data even if we didn't find a usage chunk
-							await captureUsageData({
-								input: bgInputTokens,
-								output: bgOutputTokens,
-								cacheWrite: bgCacheWriteTokens,
-								cacheRead: bgCacheReadTokens,
-								total: bgTotalCost,
-							})
+							await captureUsageData(
+								{
+									input: bgInputTokens,
+									output: bgOutputTokens,
+									cacheWrite: bgCacheWriteTokens,
+									cacheRead: bgCacheReadTokens,
+									total: bgTotalCost,
+								},
+								lastApiReqIndex,
+							)
 						} else {
 							console.warn(
-								`Suspicious: request ${lastApiReqIndex} is complete, but no usage info was found. Model: ${modelId}`,
+								`[Background Usage Collection] Suspicious: request ${apiReqIndex} is complete, but no usage info was found. Model: ${modelId}`,
 							)
 						}
 					} catch (error) {
@@ -1554,19 +1576,22 @@ export class Task extends EventEmitter<ClineEvents> {
 							bgCacheWriteTokens > 0 ||
 							bgCacheReadTokens > 0
 						) {
-							await captureUsageData({
-								input: bgInputTokens,
-								output: bgOutputTokens,
-								cacheWrite: bgCacheWriteTokens,
-								cacheRead: bgCacheReadTokens,
-								total: bgTotalCost,
-							})
+							await captureUsageData(
+								{
+									input: bgInputTokens,
+									output: bgOutputTokens,
+									cacheWrite: bgCacheWriteTokens,
+									cacheRead: bgCacheReadTokens,
+									total: bgTotalCost,
+								},
+								lastApiReqIndex,
+							)
 						}
 					}
 				}
 
 				// Start the background task and handle any errors
-				const backgroundDrainPromise = drainStreamInBackgroundToFindAllUsage().catch((error) => {
+				drainStreamInBackgroundToFindAllUsage(lastApiReqIndex).catch((error) => {
 					console.error("Background usage collection failed:", error)
 				})
 			} catch (error) {
