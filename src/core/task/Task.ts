@@ -1434,16 +1434,75 @@ export class Task extends EventEmitter<ClineEvents> {
 					}
 				}
 
+				// Create a copy of current token values to avoid race conditions
+				const currentTokens = {
+					input: inputTokens,
+					output: outputTokens,
+					cacheWrite: cacheWriteTokens,
+					cacheRead: cacheReadTokens,
+					total: totalCost,
+				}
+
 				const drainStreamInBackgroundToFindAllUsage = async () => {
-					const timeoutMs = 30000 // 30 second timeout
+					// Make timeout configurable via environment variable or use default
+					const timeoutMs = parseInt(process.env.CLINE_USAGE_COLLECTION_TIMEOUT || "30000", 10)
 					const startTime = Date.now()
+					const modelId = getModelId(this.apiConfiguration)
+
+					// Local variables to accumulate usage data without affecting the main flow
+					let bgInputTokens = currentTokens.input
+					let bgOutputTokens = currentTokens.output
+					let bgCacheWriteTokens = currentTokens.cacheWrite
+					let bgCacheReadTokens = currentTokens.cacheRead
+					let bgTotalCost = currentTokens.total
+
+					// Helper function to capture telemetry and update messages
+					const captureUsageData = async (tokens: {
+						input: number
+						output: number
+						cacheWrite: number
+						cacheRead: number
+						total?: number
+					}) => {
+						if (tokens.input > 0 || tokens.output > 0 || tokens.cacheWrite > 0 || tokens.cacheRead > 0) {
+							// Update the shared variables atomically
+							inputTokens = tokens.input
+							outputTokens = tokens.output
+							cacheWriteTokens = tokens.cacheWrite
+							cacheReadTokens = tokens.cacheRead
+							totalCost = tokens.total
+
+							// Update the API request message with the latest usage data
+							updateApiReqMsg()
+							await this.saveClineMessages()
+
+							// Capture telemetry
+							TelemetryService.instance.captureLlmCompletion(this.taskId, {
+								inputTokens: tokens.input,
+								outputTokens: tokens.output,
+								cacheWriteTokens: tokens.cacheWrite,
+								cacheReadTokens: tokens.cacheRead,
+								cost:
+									tokens.total ??
+									calculateApiCostAnthropic(
+										this.api.getModel().info,
+										tokens.input,
+										tokens.output,
+										tokens.cacheWrite,
+										tokens.cacheRead,
+									),
+							})
+						}
+					}
 
 					try {
 						let usageFound = false
 						while (!item.done) {
 							// Check for timeout
 							if (Date.now() - startTime > timeoutMs) {
-								console.warn(`Background usage collection timed out after ${timeoutMs}ms`)
+								console.warn(
+									`Background usage collection timed out after ${timeoutMs}ms for model: ${modelId}`,
+								)
 								break
 							}
 
@@ -1451,35 +1510,37 @@ export class Task extends EventEmitter<ClineEvents> {
 							item = await iterator.next()
 							if (chunk && chunk.type === "usage") {
 								usageFound = true
-								inputTokens += chunk.inputTokens
-								outputTokens += chunk.outputTokens
-								cacheWriteTokens += chunk.cacheWriteTokens ?? 0
-								cacheReadTokens += chunk.cacheReadTokens ?? 0
-								totalCost = chunk.totalCost
+								bgInputTokens += chunk.inputTokens
+								bgOutputTokens += chunk.outputTokens
+								bgCacheWriteTokens += chunk.cacheWriteTokens ?? 0
+								bgCacheReadTokens += chunk.cacheReadTokens ?? 0
+								bgTotalCost = chunk.totalCost
 							}
 						}
+
 						if (usageFound) {
-							updateApiReqMsg()
-							await this.saveClineMessages()
-						}
-						if (inputTokens > 0 || outputTokens > 0 || cacheWriteTokens > 0 || cacheReadTokens > 0) {
-							TelemetryService.instance.captureLlmCompletion(this.taskId, {
-								inputTokens,
-								outputTokens,
-								cacheWriteTokens,
-								cacheReadTokens,
-								cost:
-									totalCost ??
-									calculateApiCostAnthropic(
-										this.api.getModel().info,
-										inputTokens,
-										outputTokens,
-										cacheWriteTokens,
-										cacheReadTokens,
-									),
+							await captureUsageData({
+								input: bgInputTokens,
+								output: bgOutputTokens,
+								cacheWrite: bgCacheWriteTokens,
+								cacheRead: bgCacheReadTokens,
+								total: bgTotalCost,
+							})
+						} else if (
+							bgInputTokens > 0 ||
+							bgOutputTokens > 0 ||
+							bgCacheWriteTokens > 0 ||
+							bgCacheReadTokens > 0
+						) {
+							// We have some usage data even if we didn't find a usage chunk
+							await captureUsageData({
+								input: bgInputTokens,
+								output: bgOutputTokens,
+								cacheWrite: bgCacheWriteTokens,
+								cacheRead: bgCacheReadTokens,
+								total: bgTotalCost,
 							})
 						} else {
-							const modelId = getModelId(this.apiConfiguration)
 							console.warn(
 								`Suspicious: request ${lastApiReqIndex} is complete, but no usage info was found. Model: ${modelId}`,
 							)
@@ -1487,26 +1548,27 @@ export class Task extends EventEmitter<ClineEvents> {
 					} catch (error) {
 						console.error("Error draining stream for usage data:", error)
 						// Still try to capture whatever usage data we have collected so far
-						if (inputTokens > 0 || outputTokens > 0 || cacheWriteTokens > 0 || cacheReadTokens > 0) {
-							TelemetryService.instance.captureLlmCompletion(this.taskId, {
-								inputTokens,
-								outputTokens,
-								cacheWriteTokens,
-								cacheReadTokens,
-								cost:
-									totalCost ??
-									calculateApiCostAnthropic(
-										this.api.getModel().info,
-										inputTokens,
-										outputTokens,
-										cacheWriteTokens,
-										cacheReadTokens,
-									),
+						if (
+							bgInputTokens > 0 ||
+							bgOutputTokens > 0 ||
+							bgCacheWriteTokens > 0 ||
+							bgCacheReadTokens > 0
+						) {
+							await captureUsageData({
+								input: bgInputTokens,
+								output: bgOutputTokens,
+								cacheWrite: bgCacheWriteTokens,
+								cacheRead: bgCacheReadTokens,
+								total: bgTotalCost,
 							})
 						}
 					}
 				}
-				const backgroundDrainPromise = drainStreamInBackgroundToFindAllUsage() // Store promise reference
+
+				// Start the background task and handle any errors
+				const backgroundDrainPromise = drainStreamInBackgroundToFindAllUsage().catch((error) => {
+					console.error("Background usage collection failed:", error)
+				})
 			} catch (error) {
 				// Abandoned happens when extension is no longer waiting for the
 				// Cline instance to finish aborting (error is thrown here when
@@ -1570,7 +1632,8 @@ export class Task extends EventEmitter<ClineEvents> {
 			}
 
 			// Note: updateApiReqMsg() is now called from within drainStreamInBackgroundToFindAllUsage
-			// to avoid race conditions with the background task
+			// to ensure usage data is captured even when the stream is interrupted. The background task
+			// uses local variables to accumulate usage data before atomically updating the shared state.
 			await this.saveClineMessages()
 			await this.providerRef.deref()?.postStateToWebview()
 
