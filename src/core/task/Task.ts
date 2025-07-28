@@ -1509,14 +1509,21 @@ export class Task extends EventEmitter<ClineEvents> {
 					}
 
 					try {
+						// Continue processing the original stream from where the main loop left off
 						let usageFound = false
 						let chunkCount = 0
+
+						// Use the same iterator that the main loop was using
 						while (!item.done) {
 							// Check for timeout
 							if (Date.now() - startTime > timeoutMs) {
 								console.warn(
 									`[Background Usage Collection] Timed out after ${timeoutMs}ms for model: ${modelId}, processed ${chunkCount} chunks`,
 								)
+								// Clean up the iterator before breaking
+								if (iterator.return) {
+									await iterator.return(undefined)
+								}
 								break
 							}
 
@@ -1534,24 +1541,14 @@ export class Task extends EventEmitter<ClineEvents> {
 							}
 						}
 
-						if (usageFound) {
-							await captureUsageData(
-								{
-									input: bgInputTokens,
-									output: bgOutputTokens,
-									cacheWrite: bgCacheWriteTokens,
-									cacheRead: bgCacheReadTokens,
-									total: bgTotalCost,
-								},
-								lastApiReqIndex,
-							)
-						} else if (
+						if (
+							usageFound ||
 							bgInputTokens > 0 ||
 							bgOutputTokens > 0 ||
 							bgCacheWriteTokens > 0 ||
 							bgCacheReadTokens > 0
 						) {
-							// We have some usage data even if we didn't find a usage chunk
+							// We have usage data either from a usage chunk or accumulated tokens
 							await captureUsageData(
 								{
 									input: bgInputTokens,
