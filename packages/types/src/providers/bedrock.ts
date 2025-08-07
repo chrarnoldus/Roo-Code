@@ -82,6 +82,21 @@ export const bedrockModels = {
 		maxCachePoints: 4,
 		cachableFields: ["system", "messages", "tools"],
 	},
+	"anthropic.claude-opus-4-1-20250805-v1:0": {
+		maxTokens: 8192,
+		contextWindow: 200_000,
+		supportsImages: true,
+		supportsComputerUse: true,
+		supportsPromptCache: true,
+		supportsReasoningBudget: true,
+		inputPrice: 15.0,
+		outputPrice: 75.0,
+		cacheWritesPrice: 18.75,
+		cacheReadsPrice: 1.5,
+		minTokensPerCachePoint: 1024,
+		maxCachePoints: 4,
+		cachableFields: ["system", "messages", "tools"],
+	},
 	"anthropic.claude-opus-4-20250514-v1:0": {
 		maxTokens: 8192,
 		contextWindow: 200_000,
@@ -360,7 +375,7 @@ export const BEDROCK_MAX_TOKENS = 4096
 
 export const BEDROCK_DEFAULT_CONTEXT = 128_000
 
-// AWS Bedrock Inference Profile mapping based on official documentation
+// Amazon Bedrock Inference Profile mapping based on official documentation
 // https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html
 // This mapping is pre-ordered by pattern length (descending) to ensure more specific patterns match first
 export const AWS_INFERENCE_PROFILE_MAPPING: Array<[string, string]> = [
@@ -378,7 +393,7 @@ export const AWS_INFERENCE_PROFILE_MAPPING: Array<[string, string]> = [
 	["sa-", "sa."],
 ]
 
-// AWS Bedrock supported regions for the regions dropdown
+// Amazon Bedrock supported regions for the regions dropdown
 // Based on official AWS documentation
 export const BEDROCK_REGIONS = [
 	{ value: "us-east-1", label: "us-east-1" },

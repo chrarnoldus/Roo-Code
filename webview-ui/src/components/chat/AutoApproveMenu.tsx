@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from "react"
+import { memo, useCallback, useMemo, useState } from "react"
 import { Trans } from "react-i18next"
-import { VSCodeCheckbox, VSCodeLink, VSCodeTextField } from "@vscode/webview-ui-toolkit/react"
+import { VSCodeCheckbox, VSCodeLink } from "@vscode/webview-ui-toolkit/react"
 
 import { vscode } from "@src/utils/vscode"
 import { useExtensionState } from "@src/context/ExtensionStateContext"
@@ -21,7 +21,6 @@ const AutoApproveMenu = ({ style }: AutoApproveMenuProps) => {
 		autoApprovalEnabled,
 		setAutoApprovalEnabled,
 		alwaysApproveResubmit,
-		allowedMaxRequests,
 		setAlwaysAllowReadOnly,
 		setAlwaysAllowWrite,
 		setAlwaysAllowExecute,
@@ -32,7 +31,6 @@ const AutoApproveMenu = ({ style }: AutoApproveMenuProps) => {
 		setAlwaysApproveResubmit,
 		setAlwaysAllowFollowupQuestions,
 		setAlwaysAllowUpdateTodoList,
-		setAllowedMaxRequests,
 	} = useExtensionState()
 
 	const { t } = useAppTranslation()
@@ -129,11 +127,6 @@ const AutoApproveMenu = ({ style }: AutoApproveMenuProps) => {
 		setIsExpanded((prev) => !prev)
 	}, [])
 
-	// Disable main checkbox while menu is open or no options selected
-	const isCheckboxDisabled = useMemo(() => {
-		return !hasEnabledOptions || isExpanded
-	}, [hasEnabledOptions, isExpanded])
-
 	const enabledActionsList = Object.entries(toggles)
 		.filter(([_key, value]) => !!value)
 		.map(([key]) => t(autoApproveSettingsConfig[key as AutoApproveSetting].labelKey))
@@ -178,7 +171,7 @@ const AutoApproveMenu = ({ style }: AutoApproveMenuProps) => {
 						content={!hasEnabledOptions ? t("chat:autoApprove.selectOptionsFirst") : undefined}>
 						<VSCodeCheckbox
 							checked={effectiveAutoApprovalEnabled}
-							disabled={isCheckboxDisabled}
+							disabled={!hasEnabledOptions}
 							aria-label={
 								hasEnabledOptions
 									? t("chat:autoApprove.toggleAriaLabel")
@@ -247,47 +240,10 @@ const AutoApproveMenu = ({ style }: AutoApproveMenuProps) => {
 					</div>
 
 					<AutoApproveToggle {...toggles} onToggle={onAutoApproveToggle} />
-
-					{/* Auto-approve API request count limit input row inspired by Cline */}
-					<div
-						style={{
-							display: "flex",
-							alignItems: "center",
-							gap: "8px",
-							marginTop: "10px",
-							marginBottom: "8px",
-							color: "var(--vscode-descriptionForeground)",
-						}}>
-						<span style={{ flexShrink: 1, minWidth: 0 }}>
-							<Trans i18nKey="settings:autoApprove.apiRequestLimit.title" />:
-						</span>
-						<VSCodeTextField
-							placeholder={t("settings:autoApprove.apiRequestLimit.unlimited")}
-							value={(allowedMaxRequests ?? Infinity) === Infinity ? "" : allowedMaxRequests?.toString()}
-							onInput={(e) => {
-								const input = e.target as HTMLInputElement
-								// Remove any non-numeric characters
-								input.value = input.value.replace(/[^0-9]/g, "")
-								const value = parseInt(input.value)
-								const parsedValue = !isNaN(value) && value > 0 ? value : undefined
-								setAllowedMaxRequests(parsedValue)
-								vscode.postMessage({ type: "allowedMaxRequests", value: parsedValue })
-							}}
-							style={{ flex: 1 }}
-						/>
-					</div>
-					<div
-						style={{
-							color: "var(--vscode-descriptionForeground)",
-							fontSize: "12px",
-							marginBottom: "10px",
-						}}>
-						<Trans i18nKey="settings:autoApprove.apiRequestLimit.description" />
-					</div>
 				</div>
 			)}
 		</div>
 	)
 }
 
-export default AutoApproveMenu
+export default memo(AutoApproveMenu)

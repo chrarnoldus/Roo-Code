@@ -1,4 +1,12 @@
 {
+	"errorBoundary": {
+		"title": "Algo deu errado",
+		"reportText": "Ajude-nos a melhorar relatando este erro em",
+		"githubText": "nossa página de Issues no GitHub",
+		"copyInstructions": "Copie e cole a seguinte mensagem de erro para incluí-la como parte do seu relatório:",
+		"errorStack": "Pilha de Erro:",
+		"componentStack": "Pilha de Componentes:"
+	},
 	"number_format": {
 		"thousand_suffix": "k",
 		"million_suffix": "m",
@@ -12,7 +20,8 @@
 		"keep": "Manter"
 	},
 	"ui": {
-		"search_placeholder": "Pesquisar..."
+		"search_placeholder": "Pesquisar...",
+		"no_results": "Nenhum resultado encontrado"
 	},
 	"mermaid": {
 		"loading": "Gerando diagrama mermaid...",
@@ -58,5 +67,21 @@
 		"editMessage": "Editar Mensagem",
 		"editWarning": "Editar esta mensagem irá excluir todas as mensagens subsequentes na conversa. Deseja prosseguir?",
 		"proceed": "Prosseguir"
+	},
+	"time_ago": {
+		"just_now": "agora mesmo",
+		"seconds_ago": "há {{count}} segundos",
+		"minute_ago": "há um minuto",
+		"minutes_ago": "há {{count}} minutos",
+		"hour_ago": "há uma hora",
+		"hours_ago": "há {{count}} horas",
+		"day_ago": "há um dia",
+		"days_ago": "há {{count}} dias",
+		"week_ago": "há uma semana",
+		"weeks_ago": "há {{count}} semanas",
+		"month_ago": "há um mês",
+		"months_ago": "há {{count}} meses",
+		"year_ago": "há um ano",
+		"years_ago": "há {{count}} anos"
 	}
 }
