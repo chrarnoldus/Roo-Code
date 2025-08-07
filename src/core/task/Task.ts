@@ -22,8 +22,6 @@ import {
 	type ClineAsk,
 	type BlockingAsk,
 	type ToolProgressStatus,
-	DEFAULT_CONSECUTIVE_MISTAKE_LIMIT,
-	DEFAULT_USAGE_COLLECTION_TIMEOUT_MS,
 	type HistoryItem,
 	RooCodeEventName,
 	TelemetryEventName,
@@ -31,6 +29,7 @@ import {
 	getApiProtocol,
 	getModelId,
 	DEFAULT_CONSECUTIVE_MISTAKE_LIMIT,
+	DEFAULT_USAGE_COLLECTION_TIMEOUT_MS,
 	isBlockingAsk,
 } from "@roo-code/types"
 import { TelemetryService } from "@roo-code/telemetry"
