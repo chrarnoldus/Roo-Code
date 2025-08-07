@@ -5,6 +5,9 @@ import { CodeIndexStateManager, IndexingState } from "./state-manager"
 import { IFileWatcher, IVectorStore, BatchProcessingSummary } from "./interfaces"
 import { DirectoryScanner } from "./processors"
 import { CacheManager } from "./cache-manager"
+import { TelemetryService } from "@roo-code/telemetry"
+import { TelemetryEventName } from "@roo-code/types"
+import { t } from "../../i18n"
 
 /**
  * Manages the code indexing workflow, coordinating between different services and managers.
@@ -75,6 +78,11 @@ export class CodeIndexOrchestrator {
 			]
 		} catch (error) {
 			console.error("[CodeIndexOrchestrator] Failed to start file watcher:", error)
+			TelemetryService.instance.captureEvent(TelemetryEventName.CODE_INDEX_ERROR, {
+				error: error instanceof Error ? error.message : String(error),
+				stack: error instanceof Error ? error.stack : undefined,
+				location: "_startWatcher",
+			})
 			throw error
 		}
 	}
@@ -87,6 +95,13 @@ export class CodeIndexOrchestrator {
 	 * Initiates the indexing process (initial scan and starts watcher).
 	 */
 	public async startIndexing(): Promise<void> {
+		// Check if workspace is available first
+		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
+			this.stateManager.setSystemState("Error", t("embeddings:orchestrator.indexingRequiresWorkspace"))
+			console.warn("[CodeIndexOrchestrator] Start rejected: No workspace folder open.")
+			return
+		}
+
 		if (!this.configManager.isFeatureConfigured) {
 			this.stateManager.setSystemState("Standby", "Missing configuration. Save your settings to start indexing.")
 			console.warn("[CodeIndexOrchestrator] Start rejected: Missing configuration.")
@@ -158,26 +173,62 @@ export class CodeIndexOrchestrator {
 					const firstError = batchErrors[0]
 					throw new Error(`Indexing failed: ${firstError.message}`)
 				} else {
-					throw new Error(
-						"Indexing failed: No code blocks were successfully indexed. This usually indicates an embedder configuration issue.",
-					)
+					throw new Error(t("embeddings:orchestrator.indexingFailedNoBlocks"))
 				}
+			}
+
+			// Check for partial failures - if a significant portion of blocks failed
+			const failureRate = (cumulativeBlocksFoundSoFar - cumulativeBlocksIndexed) / cumulativeBlocksFoundSoFar
+			if (batchErrors.length > 0 && failureRate > 0.1) {
+				// More than 10% of blocks failed to index
+				const firstError = batchErrors[0]
+				throw new Error(
+					`Indexing partially failed: Only ${cumulativeBlocksIndexed} of ${cumulativeBlocksFoundSoFar} blocks were indexed. ${firstError.message}`,
+				)
+			}
+
+			// CRITICAL: If there were ANY batch errors and NO blocks were successfully indexed,
+			// this is a complete failure regardless of the failure rate calculation
+			if (batchErrors.length > 0 && cumulativeBlocksIndexed === 0) {
+				const firstError = batchErrors[0]
+				throw new Error(`Indexing failed completely: ${firstError.message}`)
+			}
+
+			// Final sanity check: If we found blocks but indexed none and somehow no errors were reported,
+			// this is still a failure
+			if (cumulativeBlocksFoundSoFar > 0 && cumulativeBlocksIndexed === 0) {
+				throw new Error(t("embeddings:orchestrator.indexingFailedCritical"))
 			}
 
 			await this._startWatcher()
 
-			this.stateManager.setSystemState("Indexed", "File watcher started.")
+			this.stateManager.setSystemState("Indexed", t("embeddings:orchestrator.fileWatcherStarted"))
 		} catch (error: any) {
 			console.error("[CodeIndexOrchestrator] Error during indexing:", error)
+			TelemetryService.instance.captureEvent(TelemetryEventName.CODE_INDEX_ERROR, {
+				error: error instanceof Error ? error.message : String(error),
+				stack: error instanceof Error ? error.stack : undefined,
+				location: "startIndexing",
+			})
 			try {
 				await this.vectorStore.clearCollection()
 			} catch (cleanupError) {
 				console.error("[CodeIndexOrchestrator] Failed to clean up after error:", cleanupError)
+				TelemetryService.instance.captureEvent(TelemetryEventName.CODE_INDEX_ERROR, {
+					error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+					stack: cleanupError instanceof Error ? cleanupError.stack : undefined,
+					location: "startIndexing.cleanup",
+				})
 			}
 
 			await this.cacheManager.clearCacheFile()
 
-			this.stateManager.setSystemState("Error", `Failed during initial scan: ${error.message || "Unknown error"}`)
+			this.stateManager.setSystemState(
+				"Error",
+				t("embeddings:orchestrator.failedDuringInitialScan", {
+					errorMessage: error.message || t("embeddings:orchestrator.unknownError"),
+				}),
+			)
 			this.stopWatcher()
 		} finally {
 			this._isProcessing = false
@@ -193,7 +244,7 @@ export class CodeIndexOrchestrator {
 		this._fileWatcherSubscriptions = []
 
 		if (this.stateManager.state !== "Error") {
-			this.stateManager.setSystemState("Standby", "File watcher stopped.")
+			this.stateManager.setSystemState("Standby", t("embeddings:orchestrator.fileWatcherStopped"))
 		}
 		this._isProcessing = false
 	}
@@ -216,6 +267,11 @@ export class CodeIndexOrchestrator {
 				}
 			} catch (error: any) {
 				console.error("[CodeIndexOrchestrator] Failed to clear vector collection:", error)
+				TelemetryService.instance.captureEvent(TelemetryEventName.CODE_INDEX_ERROR, {
+					error: error instanceof Error ? error.message : String(error),
+					stack: error instanceof Error ? error.stack : undefined,
+					location: "clearIndexData",
+				})
 				this.stateManager.setSystemState("Error", `Failed to clear vector collection: ${error.message}`)
 			}
 

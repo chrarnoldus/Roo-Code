@@ -29,7 +29,7 @@ import { CodeIndexManager } from "../../../services/code-index/manager"
 const toolDescriptionMap: Record<string, (args: ToolArgs) => string | undefined> = {
 	execute_command: (args) => getExecuteCommandDescription(args),
 	read_file: (args) => getReadFileDescription(args),
-	fetch_instructions: () => getFetchInstructionsDescription(),
+	fetch_instructions: (args) => getFetchInstructionsDescription(args.settings?.enableMcpServerCreation),
 	write_to_file: (args) => getWriteToFileDescription(args),
 	search_files: (args) => getSearchFilesDescription(args),
 	list_files: (args) => getListFilesDescription(args),
@@ -61,6 +61,7 @@ export function getToolDescriptionsForMode(
 	experiments?: Record<string, boolean>,
 	partialReadsEnabled?: boolean,
 	settings?: Record<string, any>,
+	enableMcpServerCreation?: boolean,
 ): string {
 	const config = getModeConfig(mode, customModes)
 	const args: ToolArgs = {
@@ -70,7 +71,10 @@ export function getToolDescriptionsForMode(
 		browserViewportSize,
 		mcpHub,
 		partialReadsEnabled,
-		settings,
+		settings: {
+			...settings,
+			enableMcpServerCreation,
+		},
 		experiments,
 	}
 
@@ -107,6 +111,11 @@ export function getToolDescriptionsForMode(
 		!(codeIndexManager.isFeatureEnabled && codeIndexManager.isFeatureConfigured && codeIndexManager.isInitialized)
 	) {
 		tools.delete("codebase_search")
+	}
+
+	// Conditionally exclude update_todo_list if disabled in settings
+	if (settings?.todoListEnabled === false) {
+		tools.delete("update_todo_list")
 	}
 
 	// Map tool descriptions for allowed tools

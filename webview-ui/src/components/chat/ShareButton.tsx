@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
+import { SquareArrowOutUpRightIcon } from "lucide-react"
 
 import type { HistoryItem, ShareVisibility } from "@roo-code/types"
 import { TelemetryEventName } from "@roo-code/types"
@@ -26,25 +27,31 @@ import {
 interface ShareButtonProps {
 	item?: HistoryItem
 	disabled?: boolean
+	showLabel?: boolean
 }
 
-export const ShareButton = ({ item, disabled = false }: ShareButtonProps) => {
+export const ShareButton = ({ item, disabled = false, showLabel = false }: ShareButtonProps) => {
 	const [shareDropdownOpen, setShareDropdownOpen] = useState(false)
 	const [connectModalOpen, setConnectModalOpen] = useState(false)
 	const [shareSuccess, setShareSuccess] = useState<{ visibility: ShareVisibility; url: string } | null>(null)
 	const { t } = useTranslation()
 	const { sharingEnabled, cloudIsAuthenticated, cloudUserInfo } = useExtensionState()
 	const wasUnauthenticatedRef = useRef(false)
+	const initiatedAuthFromThisButtonRef = useRef(false)
 
 	// Track authentication state changes to auto-open popover after login
 	useEffect(() => {
 		if (!cloudIsAuthenticated || !sharingEnabled) {
 			wasUnauthenticatedRef.current = true
 		} else if (wasUnauthenticatedRef.current && cloudIsAuthenticated && sharingEnabled) {
-			// User just authenticated, send telemetry, close modal, and open the popover
-			telemetryClient.capture(TelemetryEventName.ACCOUNT_CONNECT_SUCCESS)
-			setConnectModalOpen(false)
-			setShareDropdownOpen(true)
+			// Only open dropdown if auth was initiated from this button
+			if (initiatedAuthFromThisButtonRef.current) {
+				// User just authenticated from this share button, send telemetry, close modal, and open the popover
+				telemetryClient.capture(TelemetryEventName.ACCOUNT_CONNECT_SUCCESS)
+				setConnectModalOpen(false)
+				setShareDropdownOpen(true)
+				initiatedAuthFromThisButtonRef.current = false // Reset the flag
+			}
 			wasUnauthenticatedRef.current = false
 		}
 	}, [cloudIsAuthenticated, sharingEnabled])
@@ -92,6 +99,8 @@ export const ShareButton = ({ item, disabled = false }: ShareButtonProps) => {
 		// Send telemetry for connect to cloud action
 		telemetryClient.capture(TelemetryEventName.SHARE_CONNECT_TO_CLOUD_CLICKED)
 
+		// Mark that authentication was initiated from this button
+		initiatedAuthFromThisButtonRef.current = true
 		vscode.postMessage({ type: "rooCloudSignIn" })
 		setShareDropdownOpen(false)
 		setConnectModalOpen(false)
@@ -148,14 +157,21 @@ export const ShareButton = ({ item, disabled = false }: ShareButtonProps) => {
 						<PopoverTrigger asChild>
 							<Button
 								variant="ghost"
-								size="icon"
+								size={showLabel ? "sm" : "icon"}
 								disabled={disabled || shareButtonState.disabled}
-								className="h-7 w-7 p-1.5 hover:bg-vscode-toolbar-hoverBackground"
-								onClick={handleShareButtonClick}>
-								<span className="codicon codicon-link"></span>
+								className={
+									showLabel
+										? "h-7 px-2 hover:bg-vscode-toolbar-hoverBackground"
+										: "h-7 w-7 p-1.5 hover:bg-vscode-toolbar-hoverBackground"
+								}
+								onClick={handleShareButtonClick}
+								data-testid="share-button">
+								<SquareArrowOutUpRightIcon />
+								{showLabel && <span className="ml-0">{t("chat:task.share")}</span>}
 							</Button>
 						</PopoverTrigger>
 					</StandardTooltip>
+
 					<PopoverContent className="w-56 p-0" align="start">
 						{shareSuccess ? (
 							<div className="p-3">
@@ -210,11 +226,17 @@ export const ShareButton = ({ item, disabled = false }: ShareButtonProps) => {
 				<StandardTooltip content={shareButtonState.title}>
 					<Button
 						variant="ghost"
-						size="icon"
+						size={showLabel ? "sm" : "icon"}
 						disabled={disabled || shareButtonState.disabled}
-						className="h-7 w-7 p-1.5 hover:bg-vscode-toolbar-hoverBackground"
-						onClick={handleShareButtonClick}>
-						<span className="codicon codicon-link"></span>
+						className={
+							showLabel
+								? "h-7 px-2 hover:bg-vscode-toolbar-hoverBackground"
+								: "h-7 w-7 p-1.5 hover:bg-vscode-toolbar-hoverBackground"
+						}
+						onClick={handleShareButtonClick}
+						data-testid="share-button">
+						<SquareArrowOutUpRightIcon />
+						{showLabel && <span className="ml-1">{t("chat:task.share")}</span>}
 					</Button>
 				</StandardTooltip>
 			)}

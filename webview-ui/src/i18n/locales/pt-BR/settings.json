@@ -39,7 +39,7 @@
 	"codeIndex": {
 		"title": "Indexação de Código",
 		"enableLabel": "Ativar Indexação de Código",
-		"enableDescription": "<0>Indexação de Código</0> é um recurso experimental que cria um índice de busca semântica do seu projeto usando embeddings de IA. Isso permite ao Roo Code entender melhor e navegar grandes bases de código encontrando código relevante baseado em significado ao invés de apenas palavras-chave.",
+		"enableDescription": "Ative a indexação de código para pesquisa e compreensão de contexto aprimoradas",
 		"providerLabel": "Provedor de Embeddings",
 		"selectProviderPlaceholder": "Selecionar provedor",
 		"openaiProvider": "OpenAI",
@@ -47,6 +47,9 @@
 		"geminiProvider": "Gemini",
 		"geminiApiKeyLabel": "Chave de API:",
 		"geminiApiKeyPlaceholder": "Digite sua chave de API do Gemini",
+		"mistralProvider": "Mistral",
+		"mistralApiKeyLabel": "Chave de API:",
+		"mistralApiKeyPlaceholder": "Digite sua chave de API da Mistral",
 		"openaiCompatibleProvider": "Compatível com OpenAI",
 		"openAiKeyLabel": "Chave de API OpenAI",
 		"openAiKeyPlaceholder": "Digite sua chave de API OpenAI",
@@ -81,6 +84,7 @@
 		"ollamaBaseUrlLabel": "URL Base do Ollama",
 		"qdrantApiKeyLabel": "Chave da API Qdrant",
 		"qdrantApiKeyPlaceholder": "Insira sua chave da API Qdrant (opcional)",
+		"setupConfigLabel": "Configuração",
 		"ollamaUrlPlaceholder": "http://localhost:11434",
 		"openAiCompatibleBaseUrlPlaceholder": "https://api.example.com",
 		"modelDimensionPlaceholder": "1536",
@@ -97,6 +101,22 @@
 			"error": "Erro"
 		},
 		"close": "Fechar",
+		"validation": {
+			"invalidQdrantUrl": "URL do Qdrant inválida",
+			"invalidOllamaUrl": "URL do Ollama inválida",
+			"invalidBaseUrl": "URL base inválida",
+			"qdrantUrlRequired": "A URL do Qdrant é obrigatória",
+			"openaiApiKeyRequired": "A chave de API da OpenAI é obrigatória",
+			"modelSelectionRequired": "A seleção do modelo é obrigatória",
+			"apiKeyRequired": "A chave de API é obrigatória",
+			"modelIdRequired": "O ID do modelo é obrigatório",
+			"modelDimensionRequired": "A dimensão do modelo é obrigatória",
+			"geminiApiKeyRequired": "A chave de API do Gemini é obrigatória",
+			"mistralApiKeyRequired": "A chave de API Mistral é obrigatória",
+			"ollamaBaseUrlRequired": "A URL base do Ollama é obrigatória",
+			"baseUrlRequired": "A URL base é obrigatória",
+			"modelDimensionMinValue": "A dimensão do modelo deve ser maior que 0"
+		},
 		"advancedConfigLabel": "Configuração Avançada",
 		"searchMinScoreLabel": "Limite de pontuação de busca",
 		"searchMinScoreDescription": "Pontuação mínima de similaridade (0.0-1.0) necessária para os resultados da busca. Valores mais baixos retornam mais resultados, mas podem ser menos relevantes. Valores mais altos retornam menos resultados, mas mais relevantes.",
@@ -107,6 +127,9 @@
 	},
 	"autoApprove": {
 		"description": "Permitir que o Roo realize operações automaticamente sem exigir aprovação. Ative essas configurações apenas se confiar totalmente na IA e compreender os riscos de segurança associados.",
+		"enabled": "Aprovação automática habilitada",
+		"toggleAriaLabel": "Alternar aprovação automática",
+		"disabledAriaLabel": "Aprovação automática desativada - selecione as opções primeiro",
 		"readOnly": {
 			"label": "Leitura",
 			"description": "Quando ativado, o Roo visualizará automaticamente o conteúdo do diretório e lerá arquivos sem que você precise clicar no botão Aprovar.",
@@ -159,8 +182,12 @@
 			"description": "Executar automaticamente comandos de terminal permitidos sem exigir aprovação",
 			"allowedCommands": "Comandos de auto-execução permitidos",
 			"allowedCommandsDescription": "Prefixos de comando que podem ser auto-executados quando \"Aprovar sempre operações de execução\" está ativado. Adicione * para permitir todos os comandos (use com cautela).",
+			"deniedCommands": "Comandos negados",
+			"deniedCommandsDescription": "Prefixos de comandos que serão automaticamente negados sem pedir aprovação. Em caso de conflitos com comandos permitidos, a correspondência de prefixo mais longa tem precedência. Adicione * para negar todos os comandos.",
 			"commandPlaceholder": "Digite o prefixo do comando (ex. 'git ')",
-			"addButton": "Adicionar"
+			"deniedCommandPlaceholder": "Digite o prefixo do comando para negar (ex. 'rm -rf')",
+			"addButton": "Adicionar",
+			"autoDenied": "Comandos com o prefixo `{{prefix}}` foram proibidos pelo usuário. Não contorne esta restrição executando outro comando."
 		},
 		"updateTodoList": {
 			"label": "Todo",
@@ -170,6 +197,14 @@
 			"title": "Máximo de Solicitações",
 			"description": "Fazer automaticamente este número de requisições à API antes de pedir aprovação para continuar com a tarefa.",
 			"unlimited": "Ilimitado"
+		},
+		"selectOptionsFirst": "Selecione pelo menos uma opção abaixo para habilitar a aprovação automática",
+		"apiCostLimit": {
+			"title": "Custo máximo",
+			"unlimited": "Ilimitado"
+		},
+		"maxLimits": {
+			"description": "Fazer solicitações automaticamente até estes limites antes de pedir aprovação para continuar."
 		}
 	},
 	"providers": {
@@ -190,6 +225,8 @@
 		"createProfile": "Criar perfil",
 		"cannotDeleteOnlyProfile": "Não é possível excluir o único perfil",
 		"searchPlaceholder": "Pesquisar perfis",
+		"searchProviderPlaceholder": "Pesquisar provedores",
+		"noProviderMatchFound": "Nenhum provedor encontrado",
 		"noMatchFound": "Nenhum perfil correspondente encontrado",
 		"vscodeLmDescription": "A API do Modelo de Linguagem do VS Code permite executar modelos fornecidos por outras extensões do VS Code (incluindo, mas não se limitando, ao GitHub Copilot). A maneira mais fácil de começar é instalar as extensões Copilot e Copilot Chat no VS Code Marketplace.",
 		"awsCustomArnUse": "Insira um ARN Amazon Bedrock válido para o modelo que deseja usar. Exemplos de formato:",
@@ -220,14 +257,42 @@
 		"anthropicApiKey": "Chave de API Anthropic",
 		"getAnthropicApiKey": "Obter chave de API Anthropic",
 		"anthropicUseAuthToken": "Passar a chave de API Anthropic como cabeçalho Authorization em vez de X-Api-Key",
+		"cerebrasApiKey": "Chave de API Cerebras",
+		"getCerebrasApiKey": "Obter chave de API Cerebras",
 		"chutesApiKey": "Chave de API Chutes",
 		"getChutesApiKey": "Obter chave de API Chutes",
+		"fireworksApiKey": "Chave de API Fireworks",
+		"getFireworksApiKey": "Obter chave de API Fireworks",
 		"deepSeekApiKey": "Chave de API DeepSeek",
 		"getDeepSeekApiKey": "Obter chave de API DeepSeek",
+		"doubaoApiKey": "Chave de API Doubao",
+		"getDoubaoApiKey": "Obter chave de API Doubao",
+		"moonshotApiKey": "Chave de API Moonshot",
+		"getMoonshotApiKey": "Obter chave de API Moonshot",
+		"moonshotBaseUrl": "Ponto de entrada Moonshot",
+		"zaiApiKey": "Chave de API Z AI",
+		"getZaiApiKey": "Obter chave de API Z AI",
+		"zaiEntrypoint": "Ponto de entrada Z AI",
+		"zaiEntrypointDescription": "Selecione o ponto de entrada da API apropriado com base na sua localização. Se você estiver na China, escolha open.bigmodel.cn. Caso contrário, escolha api.z.ai.",
 		"geminiApiKey": "Chave de API Gemini",
 		"getGroqApiKey": "Obter chave de API Groq",
 		"groqApiKey": "Chave de API Groq",
+		"getSambaNovaApiKey": "Obter chave de API SambaNova",
+		"sambaNovaApiKey": "Chave de API SambaNova",
 		"getGeminiApiKey": "Obter chave de API Gemini",
+		"getHuggingFaceApiKey": "Obter chave de API Hugging Face",
+		"huggingFaceApiKey": "Chave de API Hugging Face",
+		"huggingFaceModelId": "ID do modelo",
+		"huggingFaceLoading": "Carregando...",
+		"huggingFaceModelsCount": "({{count}} modelos)",
+		"huggingFaceSelectModel": "Selecionar um modelo...",
+		"huggingFaceSearchModels": "Buscar modelos...",
+		"huggingFaceNoModelsFound": "Nenhum modelo encontrado",
+		"huggingFaceProvider": "Provedor",
+		"huggingFaceProviderAuto": "Automático",
+		"huggingFaceSelectProvider": "Selecionar um provedor...",
+		"huggingFaceSearchProviders": "Buscar provedores...",
+		"huggingFaceNoProvidersFound": "Nenhum provedor encontrado",
 		"apiKey": "Chave de API",
 		"openAiApiKey": "Chave de API OpenAI",
 		"openAiBaseUrl": "URL Base",
@@ -242,6 +307,7 @@
 		"litellmBaseUrl": "URL base LiteLLM",
 		"awsCredentials": "Credenciais AWS",
 		"awsProfile": "Perfil AWS",
+		"awsApiKey": "Chave de API Amazon Bedrock",
 		"awsProfileName": "Nome do Perfil AWS",
 		"awsAccessKey": "Chave de Acesso AWS",
 		"awsSecretKey": "Chave Secreta AWS",
@@ -258,6 +324,16 @@
 		"cacheUsageNote": "Nota: Se você não vir o uso do cache, tente selecionar um modelo diferente e depois selecionar novamente o modelo desejado.",
 		"vscodeLmModel": "Modelo de Linguagem",
 		"vscodeLmWarning": "Nota: Esta é uma integração muito experimental e o suporte do provedor pode variar. Se você receber um erro sobre um modelo não ser suportado, isso é um problema do lado do provedor.",
+		"geminiParameters": {
+			"urlContext": {
+				"title": "Ativar contexto de URL",
+				"description": "Permite que o Gemini acesse e processe URLs para contexto adicional ao gerar respostas. Útil para tarefas que exijam análise de conteúdo da web."
+			},
+			"groundingSearch": {
+				"title": "Ativar grounding com pesquisa no Google",
+				"description": "Permite que o Gemini pesquise informações atuais no Google e fundamente as respostas em dados em tempo real. Útil para consultas que requerem informações atualizadas."
+			}
+		},
 		"googleCloudSetup": {
 			"title": "Para usar o Google Cloud Vertex AI, você precisa:",
 			"step1": "1. Criar uma conta Google Cloud, ativar a API Vertex AI e ativar os modelos Claude desejados.",
@@ -345,6 +421,12 @@
 			"label": "Limite de taxa",
 			"description": "Tempo mínimo entre requisições de API."
 		},
+		"consecutiveMistakeLimit": {
+			"label": "Limite de Erros e Repetições",
+			"description": "Número de erros consecutivos ou ações repetidas antes de exibir o diálogo 'Roo está com problemas'",
+			"unlimitedDescription": "Tentativas ilimitadas ativadas (prosseguimento automático). O diálogo nunca aparecerá.",
+			"warning": "⚠️ Definir como 0 permite tentativas ilimitadas, o que pode consumir um uso significativo da API"
+		},
 		"reasoningEffort": {
 			"label": "Esforço de raciocínio do modelo",
 			"high": "Alto",
@@ -355,7 +437,9 @@
 		"claudeCode": {
 			"pathLabel": "Caminho do Claude Code",
 			"description": "Caminho opcional para o seu Claude Code CLI. O padrão é 'claude' se não for definido.",
-			"placeholder": "Padrão: claude"
+			"placeholder": "Padrão: claude",
+			"maxTokensLabel": "Tokens de saída máximos",
+			"maxTokensDescription": "Número máximo de tokens de saída para respostas do Claude Code. O padrão é 8000."
 		}
 	},
 	"browser": {
@@ -448,6 +532,23 @@
 			"label": "Limite de leituras simultâneas",
 			"description": "Número máximo de arquivos que a ferramenta 'read_file' pode processar simultaneamente. Valores mais altos podem acelerar a leitura de vários arquivos pequenos, mas aumentam o uso de memória."
 		},
+		"diagnostics": {
+			"includeMessages": {
+				"label": "Incluir diagnósticos automaticamente no contexto",
+				"description": "Quando ativado, mensagens de diagnóstico (erros) de arquivos editados serão automaticamente incluídas no contexto. Você sempre pode incluir manualmente todos os diagnósticos do espaço de trabalho usando @problems."
+			},
+			"maxMessages": {
+				"label": "Máximo de mensagens de diagnóstico",
+				"description": "Número máximo de mensagens de diagnóstico a serem incluídas por arquivo. Este limite se aplica tanto à inclusão automática (quando a caixa de seleção está ativada) quanto às menções manuais de @problems. Valores mais altos fornecem mais contexto, mas aumentam o uso de tokens.",
+				"resetTooltip": "Redefinir para o valor padrão (50)",
+				"unlimited": "Mensagens de diagnóstico ilimitadas",
+				"unlimitedLabel": "Ilimitado"
+			},
+			"delayAfterWrite": {
+				"label": "Atraso após as gravações para permitir que os diagnósticos detectem possíveis problemas",
+				"description": "Tempo de espera após a gravação de arquivos antes de prosseguir, permitindo que as ferramentas de diagnóstico processem as alterações e detectem problemas."
+			}
+		},
 		"condensingThreshold": {
 			"label": "Limite de Ativação de Condensação",
 			"selectProfile": "Configurar limite para perfil",
@@ -456,6 +557,16 @@
 			"profileDescription": "Limite personalizado apenas para este perfil (substitui o padrão global)",
 			"inheritDescription": "Este perfil herda o limite padrão global ({{threshold}}%)",
 			"usesGlobal": "(usa global {{threshold}}%)"
+		},
+		"maxImageFileSize": {
+			"label": "Tamanho máximo do arquivo de imagem",
+			"mb": "MB",
+			"description": "Tamanho máximo (em MB) para arquivos de imagem que podem ser processados pela ferramenta de leitura de arquivos."
+		},
+		"maxTotalImageSize": {
+			"label": "Tamanho total máximo da imagem",
+			"mb": "MB",
+			"description": "Limite máximo de tamanho cumulativo (em MB) para todas as imagens processadas em uma única operação read_file. Ao ler várias imagens, o tamanho de cada imagem é adicionado ao total. Se incluir outra imagem exceder esse limite, ela será ignorada."
 		}
 	},
 	"terminal": {
@@ -470,6 +581,10 @@
 		"outputLineLimit": {
 			"label": "Limite de saída do terminal",
 			"description": "Número máximo de linhas a incluir na saída do terminal ao executar comandos. Quando excedido, as linhas serão removidas do meio, economizando token. <0>Saiba mais</0>"
+		},
+		"outputCharacterLimit": {
+			"label": "Limite de caracteres do terminal",
+			"description": "Número máximo de caracteres a serem incluídos na saída do terminal ao executar comandos. Este limite tem precedência sobre o limite de linhas para evitar problemas de memória com linhas extremamente longas. Quando excedido, a saída será truncada. <0>Saiba mais</0>"
 		},
 		"shellIntegrationTimeout": {
 			"label": "Tempo limite de integração do shell do terminal",
@@ -512,6 +627,9 @@
 			"description": "Quando ativado, o terminal herda variáveis de ambiente do processo pai do VSCode, como configurações de integração do shell definidas no perfil do usuário. Isso alterna diretamente a configuração global do VSCode `terminal.integrated.inheritEnv`. <0>Saiba mais</0>"
 		}
 	},
+	"advancedSettings": {
+		"title": "Configurações avançadas"
+	},
 	"advanced": {
 		"diff": {
 			"label": "Ativar edição através de diffs",
@@ -533,6 +651,10 @@
 				"label": "Precisão de correspondência",
 				"description": "Este controle deslizante controla quão precisamente as seções de código devem corresponder ao aplicar diffs. Valores mais baixos permitem correspondências mais flexíveis, mas aumentam o risco de substituições incorretas. Use valores abaixo de 100% com extrema cautela."
 			}
+		},
+		"todoList": {
+			"label": "Habilitar ferramenta de lista de tarefas",
+			"description": "Quando habilitado, o Roo pode criar e gerenciar listas de tarefas para acompanhar o progresso das tarefas. Isso ajuda a organizar tarefas complexas em etapas gerenciáveis."
 		}
 	},
 	"experimental": {
@@ -567,6 +689,14 @@
 		"MULTI_FILE_APPLY_DIFF": {
 			"name": "Habilitar edições de arquivos concorrentes",
 			"description": "Quando habilitado, o Roo pode editar múltiplos arquivos em uma única solicitação. Quando desabilitado, o Roo deve editar arquivos um de cada vez. Desabilitar isso pode ajudar ao trabalhar com modelos menos capazes ou quando você quer mais controle sobre modificações de arquivos."
+		},
+		"PREVENT_FOCUS_DISRUPTION": {
+			"name": "Edição em segundo plano",
+			"description": "Previne a interrupção do foco do editor quando habilitado. As edições de arquivos acontecem em segundo plano sem abrir visualizações de diferenças ou roubar o foco. Você pode continuar trabalhando sem interrupções enquanto o Roo faz alterações. Os arquivos podem ser abertos sem foco para capturar diagnósticos ou permanecer completamente fechados."
+		},
+		"ASSISTANT_MESSAGE_PARSER": {
+			"name": "Usar o novo parser de mensagens",
+			"description": "Ativa o parser de mensagens em streaming experimental que acelera respostas longas ao processar as mensagens de forma mais eficiente."
 		}
 	},
 	"promptCaching": {
@@ -674,5 +804,8 @@
 		"useCustomArn": "Usar ARN personalizado..."
 	},
 	"includeMaxOutputTokens": "Incluir tokens máximos de saída",
-	"includeMaxOutputTokensDescription": "Enviar parâmetro de tokens máximos de saída nas solicitações de API. Alguns provedores podem não suportar isso."
+	"includeMaxOutputTokensDescription": "Enviar parâmetro de tokens máximos de saída nas solicitações de API. Alguns provedores podem não suportar isso.",
+	"limitMaxTokensDescription": "Limitar o número máximo de tokens na resposta",
+	"maxOutputTokensLabel": "Tokens máximos de saída",
+	"maxTokensGenerateDescription": "Tokens máximos para gerar na resposta"
 }

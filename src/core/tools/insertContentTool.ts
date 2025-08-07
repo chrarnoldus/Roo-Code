@@ -10,6 +10,8 @@ import { ClineSayTool } from "../../shared/ExtensionMessage"
 import { RecordSource } from "../context-tracking/FileContextTrackerTypes"
 import { fileExistsAtPath } from "../../utils/fs"
 import { insertGroups } from "../diff/insert-groups"
+import { DEFAULT_WRITE_DELAY_MS } from "@roo-code/types"
+import { EXPERIMENT_IDS, experiments } from "../../shared/experiments"
 
 export async function insertContentTool(
 	cline: Task,
@@ -51,7 +53,7 @@ export async function insertContentTool(
 			return
 		}
 
-		if (!content) {
+		if (content === undefined) {
 			cline.consecutiveMistakeCount++
 			cline.recordToolError("insert_content")
 			pushToolResult(await cline.sayAndCreateMissingParamError("insert_content", "content"))
@@ -70,17 +72,6 @@ export async function insertContentTool(
 		const isWriteProtected = cline.rooProtectedController?.isWriteProtected(relPath) || false
 
 		const absolutePath = path.resolve(cline.cwd, relPath)
-		const fileExists = await fileExistsAtPath(absolutePath)
-
-		if (!fileExists) {
-			cline.consecutiveMistakeCount++
-			cline.recordToolError("insert_content")
-			const formattedError = `File does not exist at path: ${absolutePath}\n\n<error_details>\nThe specified file could not be found. Please verify the file path and try again.\n</error_details>`
-			await cline.say("error", formattedError)
-			pushToolResult(formattedError)
-			return
-		}
-
 		const lineNumber = parseInt(line, 10)
 		if (isNaN(lineNumber) || lineNumber < 0) {
 			cline.consecutiveMistakeCount++
@@ -89,13 +80,26 @@ export async function insertContentTool(
 			return
 		}
 
+		const fileExists = await fileExistsAtPath(absolutePath)
+		let fileContent: string = ""
+		if (!fileExists) {
+			if (lineNumber > 1) {
+				cline.consecutiveMistakeCount++
+				cline.recordToolError("insert_content")
+				const formattedError = `Cannot insert content at line ${lineNumber} into a non-existent file. For new files, 'line' must be 0 (to append) or 1 (to insert at the beginning).`
+				await cline.say("error", formattedError)
+				pushToolResult(formattedError)
+				return
+			}
+		} else {
+			fileContent = await fs.readFile(absolutePath, "utf8")
+		}
+
 		cline.consecutiveMistakeCount = 0
 
-		// Read the file
-		const fileContent = await fs.readFile(absolutePath, "utf8")
-		cline.diffViewProvider.editType = "modify"
+		cline.diffViewProvider.editType = fileExists ? "modify" : "create"
 		cline.diffViewProvider.originalContent = fileContent
-		const lines = fileContent.split("\n")
+		const lines = fileExists ? fileContent.split("\n") : []
 
 		const updatedContent = insertGroups(lines, [
 			{
@@ -104,44 +108,73 @@ export async function insertContentTool(
 			},
 		]).join("\n")
 
-		// Show changes in diff view
-		if (!cline.diffViewProvider.isEditing) {
-			await cline.ask("tool", JSON.stringify(sharedMessageProps), true).catch(() => {})
-			// First open with original content
-			await cline.diffViewProvider.open(relPath)
-			await cline.diffViewProvider.update(fileContent, false)
-			cline.diffViewProvider.scrollToFirstDiff()
-			await delay(200)
+		// Check if preventFocusDisruption experiment is enabled
+		const provider = cline.providerRef.deref()
+		const state = await provider?.getState()
+		const diagnosticsEnabled = state?.diagnosticsEnabled ?? true
+		const writeDelayMs = state?.writeDelayMs ?? DEFAULT_WRITE_DELAY_MS
+		const isPreventFocusDisruptionEnabled = experiments.isEnabled(
+			state?.experiments ?? {},
+			EXPERIMENT_IDS.PREVENT_FOCUS_DISRUPTION,
+		)
+
+		// For consistency with writeToFileTool, handle new files differently
+		let diff: string | undefined
+		let approvalContent: string | undefined
+
+		if (fileExists) {
+			// For existing files, generate diff and check for changes
+			diff = formatResponse.createPrettyPatch(relPath, fileContent, updatedContent)
+			if (!diff) {
+				pushToolResult(`No changes needed for '${relPath}'`)
+				return
+			}
+			approvalContent = undefined
+		} else {
+			// For new files, skip diff generation and provide full content
+			diff = undefined
+			approvalContent = updatedContent
 		}
 
-		const diff = formatResponse.createPrettyPatch(relPath, fileContent, updatedContent)
-
-		if (!diff) {
-			pushToolResult(`No changes needed for '${relPath}'`)
-			return
-		}
-
-		await cline.diffViewProvider.update(updatedContent, true)
-
+		// Prepare the approval message (same for both flows)
 		const completeMessage = JSON.stringify({
 			...sharedMessageProps,
 			diff,
+			content: approvalContent,
 			lineNumber: lineNumber,
 			isProtected: isWriteProtected,
 		} satisfies ClineSayTool)
 
+		// Show diff view if focus disruption prevention is disabled
+		if (!isPreventFocusDisruptionEnabled) {
+			await cline.diffViewProvider.open(relPath)
+			await cline.diffViewProvider.update(updatedContent, true)
+			cline.diffViewProvider.scrollToFirstDiff()
+		}
+
+		// Ask for approval (same for both flows)
 		const didApprove = await cline
 			.ask("tool", completeMessage, isWriteProtected)
 			.then((response) => response.response === "yesButtonClicked")
 
 		if (!didApprove) {
-			await cline.diffViewProvider.revertChanges()
+			// Revert changes if diff view was shown
+			if (!isPreventFocusDisruptionEnabled) {
+				await cline.diffViewProvider.revertChanges()
+			}
 			pushToolResult("Changes were rejected by the user.")
+			await cline.diffViewProvider.reset()
 			return
 		}
 
-		// Call saveChanges to update the DiffViewProvider properties
-		await cline.diffViewProvider.saveChanges()
+		// Save the changes
+		if (isPreventFocusDisruptionEnabled) {
+			// Direct file write without diff view or opening the file
+			await cline.diffViewProvider.saveDirectly(relPath, updatedContent, false, diagnosticsEnabled, writeDelayMs)
+		} else {
+			// Call saveChanges to update the DiffViewProvider properties
+			await cline.diffViewProvider.saveChanges(diagnosticsEnabled, writeDelayMs)
+		}
 
 		// Track file edit operation
 		if (relPath) {
@@ -151,11 +184,7 @@ export async function insertContentTool(
 		cline.didEditFile = true
 
 		// Get the formatted response message
-		const message = await cline.diffViewProvider.pushToolWriteResult(
-			cline,
-			cline.cwd,
-			false, // Always false for insert_content
-		)
+		const message = await cline.diffViewProvider.pushToolWriteResult(cline, cline.cwd, !fileExists)
 
 		pushToolResult(message)
 

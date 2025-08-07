@@ -4,11 +4,12 @@
 		"title": "Task",
 		"seeMore": "See more",
 		"seeLess": "See less",
-		"tokens": "Tokens:",
-		"cache": "Cache:",
-		"apiCost": "API Cost:",
+		"tokens": "Tokens",
+		"cache": "Cache",
+		"apiCost": "API Cost",
+		"size": "Size",
 		"condenseContext": "Intelligently condense context",
-		"contextWindow": "Context Length:",
+		"contextWindow": "Context Length",
 		"closeAndStart": "Close task and start a new one",
 		"export": "Export task history",
 		"share": "Share task",
@@ -39,7 +40,7 @@
 	},
 	"save": {
 		"title": "Save",
-		"tooltip": "Save the file changes"
+		"tooltip": "Save the message changes"
 	},
 	"tokenProgress": {
 		"availableSpace": "Available space: {{amount}} tokens",
@@ -87,6 +88,9 @@
 		"title": "Cancel",
 		"tooltip": "Cancel the current operation"
 	},
+	"editMessage": {
+		"placeholder": "Edit your message..."
+	},
 	"scrollToBottom": "Scroll to bottom of chat",
 	"about": "Generate, refactor, and debug code with AI assistance. Check out our <DocsLink>documentation</DocsLink> to learn more.",
 	"onboarding": "Your task list in this workspace is empty.",
@@ -115,14 +119,17 @@
 		"title": "Modes",
 		"marketplace": "Mode Marketplace",
 		"settings": "Mode Settings",
-		"description": "Specialized personas that tailor Roo's behavior."
+		"description": "Specialized personas that tailor Roo's behavior.",
+		"searchPlaceholder": "Search modes...",
+		"noResults": "No results found"
 	},
 	"enhancePromptDescription": "The 'Enhance Prompt' button helps improve your prompt by providing additional context, clarification, or rephrasing. Try typing a prompt in here and clicking the button again to see how it works.",
 	"addImages": "Add images to message",
 	"sendMessage": "Send message",
+	"stopTts": "Stop text-to-speech",
 	"typeMessage": "Type a message...",
 	"typeTask": "Type your task here...",
-	"addContext": "@ to add context, / to switch modes",
+	"addContext": "@ to add context, / for commands",
 	"dragFiles": "hold shift to drag in files",
 	"dragFilesImages": "hold shift to drag in files/images",
 	"errorReadingFile": "Error reading file:",
@@ -130,6 +137,7 @@
 	"separator": "Separator",
 	"edit": "Edit...",
 	"forNextMode": "for next mode",
+	"forPreviousMode": "for previous mode",
 	"apiRequest": {
 		"title": "API Request",
 		"failed": "API Request Failed",
@@ -138,7 +146,6 @@
 		"streamingFailed": "API Streaming Failed"
 	},
 	"checkpoint": {
-		"initial": "Initial Checkpoint",
 		"regular": "Checkpoint",
 		"initializingWarning": "Still initializing checkpoint... If this takes too long, you can disable checkpoints in <settingsLink>settings</settingsLink> and restart your task.",
 		"menu": {
@@ -201,10 +208,27 @@
 	"codebaseSearch": {
 		"wantsToSearch": "Roo wants to search the codebase for <code>{{query}}</code>:",
 		"wantsToSearchWithPath": "Roo wants to search the codebase for <code>{{query}}</code> in <code>{{path}}</code>:",
-		"didSearch": "Found {{count}} result(s) for <code>{{query}}</code>:",
+		"didSearch_one": "Found 1 result",
+		"didSearch_other": "Found {{count}} results",
 		"resultTooltip": "Similarity score: {{score}} (click to open file)"
 	},
 	"commandOutput": "Command Output",
+	"commandExecution": {
+		"running": "Running",
+		"pid": "PID: {{pid}}",
+		"exited": "Exited ({{exitCode}})",
+		"manageCommands": "Manage Command Permissions",
+		"commandManagementDescription": "Manage command permissions: Click ✓ to allow auto-execution, ✗ to deny execution. Patterns can be toggled on/off or removed from lists. <settingsLink>View all settings</settingsLink>",
+		"addToAllowed": "Add to allowed list",
+		"removeFromAllowed": "Remove from allowed list",
+		"addToDenied": "Add to denied list",
+		"removeFromDenied": "Remove from denied list",
+		"abortCommand": "Abort command execution",
+		"expandOutput": "Expand output",
+		"collapseOutput": "Collapse output",
+		"expandManagement": "Expand command management section",
+		"collapseManagement": "Collapse command management section"
+	},
 	"response": "Response",
 	"arguments": "Arguments",
 	"mcp": {
@@ -241,15 +265,18 @@
 	"autoApprove": {
 		"title": "Auto-approve:",
 		"none": "None",
-		"description": "Auto-approve allows Roo Code to perform actions without asking for permission. Only enable for actions you fully trust. More detailed configuration available in <settingsLink>Settings</settingsLink>."
+		"description": "Auto-approve allows Roo Code to perform actions without asking for permission. Only enable for actions you fully trust. More detailed configuration available in <settingsLink>Settings</settingsLink>.",
+		"selectOptionsFirst": "Select at least one option below to enable auto-approval",
+		"toggleAriaLabel": "Toggle auto-approval",
+		"disabledAriaLabel": "Auto-approval disabled - select options first"
 	},
 	"announcement": {
 		"title": "🎉 Roo Code {{version}} Released",
 		"description": "Roo Code {{version}} brings powerful new features and significant improvements to enhance your development workflow.",
 		"whatsNew": "What's New",
-		"feature1": "<bold>1-Click Task Sharing</bold>: Share your tasks instantly with colleagues and the community with a single click.",
-		"feature2": "<bold>Global .roo Directory Support</bold>: Load rules and configurations from a global .roo directory for consistent settings across projects.",
-		"feature3": "<bold>Improved Architect to Code Transitions</bold>: Seamless handoffs from planning in Architect mode to implementation in Code mode.",
+		"feature1": "<bold>Message Queueing</bold>: Queue multiple messages while Roo is working, allowing you to continue planning your workflow without interruption.",
+		"feature2": "<bold>Custom Slash Commands</bold>: Create personalized slash commands for quick access to frequently used prompts and workflows, with full UI management.",
+		"feature3": "<bold>Enhanced Gemini Tools</bold>: New URL context and Google Search grounding capabilities provide Gemini models with real-time web information and enhanced research abilities.",
 		"hideButton": "Hide announcement",
 		"detailsDiscussLinks": "Get more details and discuss in <discordLink>Discord</discordLink> and <redditLink>Reddit</redditLink> 🚀"
 	},
@@ -294,7 +321,7 @@
 		}
 	},
 	"systemPromptWarning": "WARNING: Custom system prompt override active. This can severely break functionality and cause unpredictable behavior.",
-	"profileViolationWarning": "The current profile violates your organization's settings",
+	"profileViolationWarning": "The current profile isn't compatible with your organization's settings",
 	"shellIntegration": {
 		"title": "Command Execution Warning",
 		"description": "Your command is being executed without VSCode terminal shell integration. To suppress this warning you can disable shell integration in the <strong>Terminal</strong> section of the <settingsLink>Roo Code settings</settingsLink> or troubleshoot VSCode terminal integration using the link below.",
@@ -304,6 +331,11 @@
 		"autoApprovedRequestLimitReached": {
 			"title": "Auto-Approved Request Limit Reached",
 			"description": "Roo has reached the auto-approved limit of {{count}} API request(s). Would you like to reset the count and proceed with the task?",
+			"button": "Reset and Continue"
+		},
+		"autoApprovedCostLimitReached": {
+			"title": "Auto-Approved Cost Limit Reached",
+			"description": "Roo has reached the auto-approved cost limit of ${{count}}. Would you like to reset the cost and proceed with the task?",
 			"button": "Reset and Continue"
 		}
 	},
@@ -316,5 +348,35 @@
 	},
 	"versionIndicator": {
 		"ariaLabel": "Version {{version}} - Click to view release notes"
+	},
+	"rooCloudCTA": {
+		"title": "Roo Code Cloud is coming soon!",
+		"description": "Run Roomote agents in the cloud, access your tasks from anywhere, collaborate with others, and more.",
+		"joinWaitlist": "Join the waitlist to get early access."
+	},
+	"command": {
+		"triggerDescription": "Trigger the {{name}} command"
+	},
+	"slashCommands": {
+		"tooltip": "Manage slash commands",
+		"title": "Slash Commands",
+		"description": "Create custom slash commands for quick access to frequently used prompts and workflows. <DocsLink>Docs</DocsLink>",
+		"globalCommands": "Global Commands",
+		"workspaceCommands": "Workspace Commands",
+		"globalCommand": "Global command",
+		"editCommand": "Edit command",
+		"deleteCommand": "Delete command",
+		"newGlobalCommandPlaceholder": "New global command...",
+		"newWorkspaceCommandPlaceholder": "New workspace command...",
+		"deleteDialog": {
+			"title": "Delete Command",
+			"description": "Are you sure you want to delete the command \"{{name}}\"? This action cannot be undone.",
+			"cancel": "Cancel",
+			"confirm": "Delete"
+		}
+	},
+	"queuedMessages": {
+		"title": "Queued Messages:",
+		"clickToEdit": "Click to edit message"
 	}
 }

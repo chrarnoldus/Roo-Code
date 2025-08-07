@@ -313,25 +313,6 @@ describe("getEnvironmentDetails", () => {
 		expect(mockInactiveTerminal.getCurrentWorkingDirectory).toHaveBeenCalled()
 	})
 
-	it("should include warning when file writing is not allowed", async () => {
-		;(isToolAllowedForMode as Mock).mockReturnValue(false)
-		;(getModeBySlug as Mock).mockImplementation((slug: string) => {
-			if (slug === "code") {
-				return { name: "💻 Code" }
-			}
-
-			if (slug === defaultModeSlug) {
-				return { name: "Default Mode" }
-			}
-
-			return null
-		})
-
-		const result = await getEnvironmentDetails(mockCline as Task)
-
-		expect(result).toContain("NOTE: You are currently in '💻 Code' mode, which does not allow write operations")
-	})
-
 	it("should include experiment-specific details when Power Steering is enabled", async () => {
 		mockState.experiments = { [EXPERIMENT_IDS.POWER_STEERING]: true }
 		;(experiments.isEnabled as Mock).mockReturnValue(true)
@@ -379,5 +360,34 @@ describe("getEnvironmentDetails", () => {
 		;(mockCline.fileContextTracker!.getAndClearRecentlyModifiedFiles as Mock).mockReturnValue([])
 
 		await expect(getEnvironmentDetails(mockCline as Task)).resolves.not.toThrow()
+	})
+	it("should include REMINDERS section when todoListEnabled is true", async () => {
+		mockProvider.getState.mockResolvedValue({
+			...mockState,
+			apiConfiguration: { todoListEnabled: true },
+		})
+		const cline = { ...mockCline, todoList: [{ content: "test", status: "pending" }] }
+		const result = await getEnvironmentDetails(cline as Task)
+		expect(result).toContain("REMINDERS")
+	})
+
+	it("should NOT include REMINDERS section when todoListEnabled is false", async () => {
+		mockProvider.getState.mockResolvedValue({
+			...mockState,
+			apiConfiguration: { todoListEnabled: false },
+		})
+		const cline = { ...mockCline, todoList: [{ content: "test", status: "pending" }] }
+		const result = await getEnvironmentDetails(cline as Task)
+		expect(result).not.toContain("REMINDERS")
+	})
+
+	it("should include REMINDERS section when todoListEnabled is undefined", async () => {
+		mockProvider.getState.mockResolvedValue({
+			...mockState,
+			apiConfiguration: {},
+		})
+		const cline = { ...mockCline, todoList: [{ content: "test", status: "pending" }] }
+		const result = await getEnvironmentDetails(cline as Task)
+		expect(result).toContain("REMINDERS")
 	})
 })

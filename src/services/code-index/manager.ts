@@ -12,6 +12,9 @@ import { CacheManager } from "./cache-manager"
 import fs from "fs/promises"
 import ignore from "ignore"
 import path from "path"
+import { t } from "../../i18n"
+import { TelemetryService } from "@roo-code/telemetry"
+import { TelemetryEventName } from "@roo-code/types"
 
 export class CodeIndexManager {
 	// --- Singleton Implementation ---
@@ -25,17 +28,27 @@ export class CodeIndexManager {
 	private _searchService: CodeIndexSearchService | undefined
 	private _cacheManager: CacheManager | undefined
 
-	public static getInstance(context: vscode.ExtensionContext): CodeIndexManager | undefined {
-		// Use first workspace folder consistently
-		const workspaceFolders = vscode.workspace.workspaceFolders
-		if (!workspaceFolders || workspaceFolders.length === 0) {
-			return undefined
-		}
+	// Flag to prevent race conditions during error recovery
+	private _isRecoveringFromError = false
 
-		// Always use the first workspace folder for consistency across all indexing operations.
-		// This ensures that the same workspace context is used throughout the indexing pipeline,
-		// preventing path resolution errors in multi-workspace scenarios.
-		const workspacePath = workspaceFolders[0].uri.fsPath
+	public static getInstance(context: vscode.ExtensionContext, workspacePath?: string): CodeIndexManager | undefined {
+		// If workspacePath is not provided, try to get it from the active editor or first workspace folder
+		if (!workspacePath) {
+			const activeEditor = vscode.window.activeTextEditor
+			if (activeEditor) {
+				const workspaceFolder = vscode.workspace.getWorkspaceFolder(activeEditor.document.uri)
+				workspacePath = workspaceFolder?.uri.fsPath
+			}
+
+			if (!workspacePath) {
+				const workspaceFolders = vscode.workspace.workspaceFolders
+				if (!workspaceFolders || workspaceFolders.length === 0) {
+					return undefined
+				}
+				// Use the first workspace folder as fallback
+				workspacePath = workspaceFolders[0].uri.fsPath
+			}
+		}
 
 		if (!CodeIndexManager.instances.has(workspacePath)) {
 			CodeIndexManager.instances.set(workspacePath, new CodeIndexManager(workspacePath, context))
@@ -118,7 +131,14 @@ export class CodeIndexManager {
 			return { requiresRestart }
 		}
 
-		// 3. CacheManager Initialization
+		// 3. Check if workspace is available
+		const workspacePath = getWorkspacePath()
+		if (!workspacePath) {
+			this._stateManager.setSystemState("Standby", "No workspace folder open")
+			return { requiresRestart }
+		}
+
+		// 4. CacheManager Initialization
 		if (!this._cacheManager) {
 			this._cacheManager = new CacheManager(this.context, this.workspacePath)
 			await this._cacheManager.initialize()
@@ -147,12 +167,26 @@ export class CodeIndexManager {
 
 	/**
 	 * Initiates the indexing process (initial scan and starts watcher).
+	 * Automatically recovers from error state if needed before starting.
+	 *
+	 * @important This method should NEVER be awaited as it starts a long-running background process.
+	 * The indexing will continue asynchronously and progress will be reported through events.
 	 */
-
 	public async startIndexing(): Promise<void> {
 		if (!this.isFeatureEnabled) {
 			return
 		}
+
+		// Check if we're in error state and recover if needed
+		const currentStatus = this.getCurrentStatus()
+		if (currentStatus.systemStatus === "Error") {
+			await this.recoverFromError()
+
+			// After recovery, we need to reinitialize since recoverFromError clears all services
+			// This will be handled by the caller (webviewMessageHandler) checking isInitialized
+			return
+		}
+
 		this.assertInitialized()
 		await this._orchestrator!.startIndexing()
 	}
@@ -166,6 +200,46 @@ export class CodeIndexManager {
 		}
 		if (this._orchestrator) {
 			this._orchestrator.stopWatcher()
+		}
+	}
+
+	/**
+	 * Recovers from error state by clearing the error and resetting internal state.
+	 * This allows the manager to be re-initialized after a recoverable error.
+	 *
+	 * This method clears all service instances (configManager, serviceFactory, orchestrator, searchService)
+	 * to force a complete re-initialization on the next operation. This ensures a clean slate
+	 * after recovering from errors such as network failures or configuration issues.
+	 *
+	 * @remarks
+	 * - Safe to call even when not in error state (idempotent)
+	 * - Does not restart indexing automatically - call initialize() after recovery
+	 * - Service instances will be recreated on next initialize() call
+	 * - Prevents race conditions from multiple concurrent recovery attempts
+	 */
+	public async recoverFromError(): Promise<void> {
+		// Prevent race conditions from multiple rapid recovery attempts
+		if (this._isRecoveringFromError) {
+			return
+		}
+
+		this._isRecoveringFromError = true
+		try {
+			// Clear error state
+			this._stateManager.setSystemState("Standby", "")
+		} catch (error) {
+			// Log error but continue with recovery - clearing service instances is more important
+			console.error("Failed to clear error state during recovery:", error)
+		} finally {
+			// Force re-initialization by clearing service instances
+			// This ensures a clean slate even if state update failed
+			this._configManager = undefined
+			this._serviceFactory = undefined
+			this._orchestrator = undefined
+			this._searchService = undefined
+
+			// Reset the flag after recovery is complete
+			this._isRecoveringFromError = false
 		}
 	}
 
@@ -195,7 +269,11 @@ export class CodeIndexManager {
 	// --- Private Helpers ---
 
 	public getCurrentStatus() {
-		return this._stateManager.getCurrentStatus()
+		const status = this._stateManager.getCurrentStatus()
+		return {
+			...status,
+			workspacePath: this.workspacePath,
+		}
 	}
 
 	public async searchIndex(query: string, directoryPrefix?: string): Promise<VectorStoreSearchResult[]> {
@@ -215,6 +293,9 @@ export class CodeIndexManager {
 		if (this._orchestrator) {
 			this.stopWatcher()
 		}
+		// Clear existing services to ensure clean state
+		this._orchestrator = undefined
+		this._searchService = undefined
 
 		// (Re)Initialize service factory
 		this._serviceFactory = new CodeIndexServiceFactory(
@@ -224,7 +305,14 @@ export class CodeIndexManager {
 		)
 
 		const ignoreInstance = ignore()
-		const ignorePath = path.join(getWorkspacePath(), ".gitignore")
+		const workspacePath = getWorkspacePath()
+
+		if (!workspacePath) {
+			this._stateManager.setSystemState("Standby", "")
+			return
+		}
+
+		const ignorePath = path.join(workspacePath, ".gitignore")
 		try {
 			const content = await fs.readFile(ignorePath, "utf8")
 			ignoreInstance.add(content)
@@ -232,6 +320,11 @@ export class CodeIndexManager {
 		} catch (error) {
 			// Should never happen: reading file failed even though it exists
 			console.error("Unexpected error loading .gitignore:", error)
+			TelemetryService.instance.captureEvent(TelemetryEventName.CODE_INDEX_ERROR, {
+				error: error instanceof Error ? error.message : String(error),
+				stack: error instanceof Error ? error.stack : undefined,
+				location: "_recreateServices",
+			})
 		}
 
 		// (Re)Create shared service instances
@@ -240,6 +333,14 @@ export class CodeIndexManager {
 			this._cacheManager!,
 			ignoreInstance,
 		)
+
+		// Validate embedder configuration before proceeding
+		const validationResult = await this._serviceFactory.validateEmbedder(embedder)
+		if (!validationResult.valid) {
+			const errorMessage = validationResult.error || "Embedder configuration validation failed"
+			this._stateManager.setSystemState("Error", errorMessage)
+			throw new Error(errorMessage)
+		}
 
 		// (Re)Initialize orchestrator
 		this._orchestrator = new CodeIndexOrchestrator(
@@ -259,6 +360,9 @@ export class CodeIndexManager {
 			embedder,
 			vectorStore,
 		)
+
+		// Clear any error state after successful recreation
+		this._stateManager.setSystemState("Standby", "")
 	}
 
 	/**
@@ -274,13 +378,38 @@ export class CodeIndexManager {
 			const isFeatureEnabled = this.isFeatureEnabled
 			const isFeatureConfigured = this.isFeatureConfigured
 
-			// If configuration changes require a restart and the manager is initialized, restart the service
-			if (requiresRestart && isFeatureEnabled && isFeatureConfigured && this.isInitialized) {
-				// Recreate services with new configuration
-				await this._recreateServices()
+			// If feature is disabled, stop the service
+			if (!isFeatureEnabled) {
+				// Stop the orchestrator if it exists
+				if (this._orchestrator) {
+					this._orchestrator.stopWatcher()
+				}
+				// Set state to indicate service is disabled
+				this._stateManager.setSystemState("Standby", "Code indexing is disabled")
+				return
+			}
 
-				// Start indexing with new services
-				this.startIndexing()
+			if (requiresRestart && isFeatureEnabled && isFeatureConfigured) {
+				try {
+					// Ensure cacheManager is initialized before recreating services
+					if (!this._cacheManager) {
+						this._cacheManager = new CacheManager(this.context, this.workspacePath)
+						await this._cacheManager.initialize()
+					}
+
+					// Recreate services with new configuration
+					await this._recreateServices()
+				} catch (error) {
+					// Error state already set in _recreateServices
+					console.error("Failed to recreate services:", error)
+					TelemetryService.instance.captureEvent(TelemetryEventName.CODE_INDEX_ERROR, {
+						error: error instanceof Error ? error.message : String(error),
+						stack: error instanceof Error ? error.stack : undefined,
+						location: "handleSettingsChange",
+					})
+					// Re-throw the error so the caller knows validation failed
+					throw error
+				}
 			}
 		}
 	}
